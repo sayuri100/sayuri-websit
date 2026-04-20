@@ -45,7 +45,6 @@
   .header h1 { font-family: 'Courier New', Courier, monospace; font-size: 2.8em; letter-spacing: 8px; color: var(--dark-ink); margin: 0; text-transform: uppercase; }
   .user-info { position: absolute; top: 10px; right: 10px; font-family: 'Courier New', Courier, monospace; font-size: 0.9em; }
   .logout-btn { background: none; border: 1px solid var(--border-color); color: #666; padding: 5px 10px; margin-left: 10px; cursor: pointer; }
-  .backup-btn { background: #555; color: white; border: none; padding: 5px 10px; margin-left: 10px; cursor: pointer; font-family: 'Courier New'; font-size: 0.9em; }
 
   /* ================= Dashboard ================= */
   .dashboard { display: flex; justify-content: center; align-items: center; gap: 60px; min-height: 60vh; padding: 40px; background: var(--paper-color); border: 1px solid var(--border-color); box-shadow: 0 10px 40px rgba(58, 50, 38, 0.15); }
@@ -129,9 +128,6 @@
   <div class="header">
     <div class="user-info">
       Welcome, <strong id="currentUser"></strong>
-      <button class="backup-btn" onclick="exportData()">Export Data</button>
-      <input type="file" id="importFile" accept=".json" style="display:none;" onchange="importData(event)">
-      <button class="backup-btn" onclick="document.getElementById('importFile').click()">Import Data</button>
       <button class="logout-btn" onclick="logout()">Logout</button>
     </div>
     <h1>Vintage Journal</h1>
@@ -235,6 +231,10 @@
 
     request.onsuccess = (event) => {
       db = event.target.result;
+    };
+
+    request.onerror = (event) => {
+      console.error("Database error:", event.target.error);
     };
   }
 
@@ -395,10 +395,10 @@
 
   // ================= 日记详情逻辑 =================
   function openDiaryDetail(id) {
-    const diary = userDiaries.find(d => d.id == id);
+    const diary = userDiaries.find(d => d.id == id); // 使用 == 兼容类型
     if (!diary) return;
 
-    currentEditingDiaryId = id;
+    currentEditingDiaryId = id; // 保存ID
     document.getElementById('detailDate').value = diary.date;
     document.getElementById('detailContent').value = diary.content;
     document.getElementById('detailContent').className = 'content-textarea readonly-text';
@@ -426,7 +426,7 @@
     const store = transaction.objectStore('diaries');
     
     const updatedDiary = {
-      id: Number(currentEditingDiaryId),
+      id: Number(currentEditingDiaryId), // 强制转为数字，解决Bug的关键
       username: currentUser,
       date: date,
       content: newContent,
@@ -437,12 +437,12 @@
     
     request.onsuccess = () => {
       closeModal('diaryDetailModal');
-      loadDiaries();
+      loadDiaries(); // 重新加载数据
       alert('Changes saved!');
     };
 
     request.onerror = () => {
-      alert('Failed to save changes.');
+      alert('Failed to save changes. Please try again.');
     };
   }
 
@@ -466,7 +466,7 @@
       const store = transaction.objectStore('photos');
       
       const updatedPhoto = {
-        id: Number(currentEditingPhotoId),
+        id: Number(currentEditingPhotoId), // 强制转为数字
         username: currentUser,
         src: e.target.result,
         date: new Date().toLocaleDateString(),
@@ -525,81 +525,6 @@
 
   function closeModal(modalId) {
     document.getElementById(modalId).classList.add('hidden');
-  }
-
-  // ================= 数据迁移 (Export / Import) =================
-  function exportData() {
-    const data = {
-      username: currentUser,
-      diaries: userDiaries,
-      photos: userPhotos
-    };
-    const jsonStr = JSON.stringify(data, null, 2);
-    const blob = new Blob([jsonStr], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `journal_backup_${currentUser}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    alert('Backup file downloaded!');
-  }
-
-  function importData(event) {
-    const file = event.target.files[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const data = JSON.parse(e.target.result);
-        
-        // 验证是否是当前用户的数据
-        if (data.username !== currentUser) {
-          alert('This backup file does not belong to the current user!');
-          return;
-        }
-
-        // 清空现有数据
-        clearAllData().then(() => {
-          // 导入日记
-          const diaryTx = db.transaction(['diaries'], 'readwrite');
-          const diaryStore = diaryTx.objectStore('diaries');
-          data.diaries.forEach(d => {
-            diaryStore.add({ ...d, username: currentUser });
-          });
-
-          // 导入照片
-          const photoTx = db.transaction(['photos'], 'readwrite');
-          const photoStore = photoTx.objectStore('photos');
-          data.photos.forEach(p => {
-            photoStore.add({ ...p, username: currentUser });
-          });
-
-          alert('Import successful! Reloading page...');
-          location.reload();
-        });
-
-      } catch (err) {
-        alert('Invalid backup file!');
-      }
-    };
-    reader.readAsText(file);
-    event.target.value = '';
-  }
-
-  function clearAllData() {
-    return new Promise((resolve) => {
-      const tx1 = db.transaction(['diaries'], 'readwrite');
-      tx1.objectStore('diaries').clear();
-      tx1.oncomplete = () => {
-        const tx2 = db.transaction(['photos'], 'readwrite');
-        tx2.objectStore('photos').clear();
-        tx2.oncomplete = resolve;
-      };
-    });
   }
 
 </script>
